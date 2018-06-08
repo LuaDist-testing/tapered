@@ -1,16 +1,16 @@
 -- This file was automatically generated for the LuaDist project.
 
 package = 'tapered'
-version = '1.0-1'
+version = '1.1-0'
 -- LuaDist source
 source = {
-  tag = "1.0-1",
+  tag = "1.1-0",
   url = "git://github.com/LuaDist-testing/tapered.git"
 }
 -- Original source
 -- source = {
---     url = 'https://bitbucket.org/telemachus/tapered/get/v1.0-1.tar.gz',
---     dir = 'telemachus-tapered-547d342faaee',
+--     url = 'https://bitbucket.org/telemachus/tapered/downloads/tapered-v1.1-0.tar.gz',
+--     dir = 'tapered',
 -- }
 description = {
     summary = 'Very minimal tap testing for Lua.',
