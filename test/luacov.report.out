@@ -1,1 +1,197 @@
-{"repo_token":"5aSjxXjT1VQO3NOIDVledn7Ma4C2VDTpD","git":{"branch":"development","remotes":[{"url":"git@bitbucket.org:telemachus\/tapered.git ","name":"origin"}],"head":{"author_name":"Peter Aronoff","author_email":"telemachus@arpinum.org","id":"c92f8eb29468c7c8114a1a6724ac98489fb29db1","message":"Forgot to install luacov etc.","committer_email":"telemachus@arpinum.org","committer_name":"Peter Aronoff"}},"source_files":[{"coverage":[null,100,100,100,100,100,100,null,100,100,100,100,100,null,null,null,null,null,992,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,392,266,266,null,null,null,334,240,null,null,94,null,null,null,null,null,410,410,410,null,null,null,null,null,214,214,56,null,158,null,null,null,null,null,100,100,100,null,null,636,null,null,null,636,null,null,null,null,null,636,null,636,626,null,10,null,null,636,null,636,388,null,248,248,248,496,248,null,null,636,null,null,null,68,null,null,null,16,null,null,null,128,null,null,null,136,null,null,null,160,null,null,null,48,null,null,null,24,null,null,null,16,null,null,null,16,null,null,null,null,24,24,24,16,null,null,null,null,92,92,88,4,4,null,6,6,2,null,98,null,null,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,100,26],"source":"-- Helper variables and functions\nlocal get_info = debug.getinfo\nlocal pcall = pcall\nlocal slice = string.sub\nlocal sprintf = string.format\nlocal str_find = string.find\nlocal tonumber = tonumber\n-- Lua 5.3 moved unpack to table.unpack\nlocal unpack = unpack or table.unpack\nlocal write = io.write\nlocal rawget = rawget\nlocal getmetatable = getmetatable\nlocal exit = os.exit\n\n---- Helper methods\n\n--- C-like printf method\nlocal printf = function(fmt, ...)\n  write(sprintf(fmt, ...))\nend\n\n--- Compare potentially complex tables or objects\n--\n-- Ideas here are taken from [Penlight][p], [Underscore][u], [cwtest][cw], and\n-- [luassert][l].\n-- [p]: https:\/\/github.com\/stevedonovan\/Penlight\n-- [u]: https:\/\/github.com\/mirven\/underscore.lua\n-- [cw]: https:\/\/github.com\/catwell\/cwtest\n-- [l]: https:\/\/github.com\/Olivine-Labs\/luassert\n--\n-- Predeclare both function names\nlocal keyvaluesame\nlocal deepsame\n--\n--- keyvaluesame(table, table) => true or false\n-- Helper method to compare all the keys and values of a table\nkeyvaluesame = function (t1, t2)\n  for k1, v1 in pairs(t1) do\n    local v2 = t2[k1]\n    if v2 == nil or not deepsame(v1, v2) then return false end\n  end\n\n  -- Check for any keys present in t2 but not t1\n  for k2, _ in pairs(t2) do\n    if t1[k2] == nil then return false end\n  end\n\n  return true\nend\n--\n--- deepsame(item, item) => true or false\n-- Compare two items of any type for identity\ndeepsame = function (t1, t2)\n  local ty1, ty2 = type(t1), type(t2)\n  if ty1 ~= ty2 then return false end\n  if ty1 ~= 'table' then return t1 == t2 end\n\n  -- If ._eq is found, use == and end quickly.\n  -- As of Lua 5.3 == only cares if **one** of the two items has a __eq\n  -- metamethod. Penlight, underscore and cwtest take the same approach,\n  -- so I will as well.\n  local eq = rawget(getmetatable(t1) or {}, '__eq')\n  if (type(eq) == 'function') then\n    return not not eq(t1, t2)\n  else\n    return keyvaluesame(t1, t2)\n  end\nend\n\n---- tapered test suite\n\nlocal exit_status = 0\nlocal test_count = 0\nlocal debug_level = 3\n\nlocal setup_call = function ()\n  if _G[\"setup\"] then return _G[\"setup\"]() end\nend\n\nlocal teardown_call = function ()\n  if _G[\"teardown\"] then return _G[\"teardown\"]() end\nend\n\n-- All other tests are defined in terms of this primitive, which is\n-- kept private.\nlocal _test = function (exp, msg)\n  test_count = test_count + 1\n\n  if msg then\n    msg = sprintf(\" - %s\", msg)\n  else\n    msg = ''\n  end\n\n  setup_call()\n\n  if exp then\n    printf(\"ok %s%s\\n\", test_count, msg)\n  else\n    exit_status = 1 + exit_status\n    printf(\"not ok %s%s\\n\", test_count, msg)\n    local info = get_info(debug_level)\n    printf(\"# Trouble in %s around line %s\\n\",\n           slice(info.source, 2), info.currentline)\n  end\n\n  teardown_call()\nend\n\nlocal ok = function (expression, msg)\n  _test(expression, msg)\nend\n\nlocal nok = function (expression, msg)\n  _test(not expression, msg)\nend\n\nlocal is = function (actual, expected, msg)\n  _test(actual == expected, msg)\nend\n\nlocal isnt = function (actual, expected, msg)\n  _test(actual ~= expected, msg)\nend\n\nlocal same = function (actual, expected, msg)\n  _test(deepsame(actual, expected), msg)\nend\n\nlocal like = function (str, pattern, msg)\n  _test(str_find(str, pattern), msg)\nend\n\nlocal unlike = function (str, pattern, msg)\n  _test(not str_find(str, pattern), msg)\nend\n\nlocal pass = function (msg)\n  _test(true, msg)\nend\n\nlocal fail = function (msg)\n  _test(false, msg)\nend\n\nlocal boom = function (func, args, msg)\n  local err, errmsg\n  err, errmsg = pcall(func, unpack(args))\n  _test(not err, msg)\n  if not err and type(errmsg) == 'string' then\n    printf('# Got this error: \"%s\"\\n', errmsg)\n  end\nend\n\nlocal done = function (n)\n  local expected = tonumber(n)\n  if not expected or test_count == expected then\n    printf('1..%d\\n', test_count)\n  elseif expected ~= test_count then\n    exit_status = 1 + exit_status\n    local s\n    if expected == 1 then s = '' else s = 's' end\n    printf(\"# Bad plan. You planned %d test%s but ran %d\\n\",\n      expected, s, test_count)\n  end\n  exit(exit_status)\nend\n\nreturn {\n  ok = ok,\n  nok = nok,\n  is = is,\n  isnt = isnt,\n  same = same,\n  like = like,\n  unlike = unlike,\n  pass = pass,\n  fail = fail,\n  boom = boom,\n  done = done,\n  _VERSION = '1.1-0',\n  _AUTHOR = 'Peter Aronoff',\n  _URL = 'https:\/\/bitbucket.org\/telemachus\/tapered',\n  _LICENSE = 'BSD 3-Clause'\n}","name":"..\/src\/tapered.lua"}]}
+
+==============================================================================
+../src/tapered.lua
+==============================================================================
+     	-- Helper variables and functions
+  126	local get_info = debug.getinfo
+  126	local pcall = pcall
+  126	local slice = string.sub
+  126	local sprintf = string.format
+  126	local str_find = string.find
+  126	local tonumber = tonumber
+     	-- Lua 5.3 moved unpack to table.unpack
+  126	local unpack = unpack or table.unpack
+  126	local write = io.write
+  126	local rawget = rawget
+  126	local getmetatable = getmetatable
+  126	local exit = os.exit
+     	
+     	---- Helper methods
+     	
+     	--- C-like printf method
+     	local printf = function(fmt, ...)
+ 1242	  write(sprintf(fmt, ...))
+     	end
+     	
+     	--- Compare potentially complex tables or objects
+     	--
+     	-- Ideas here are taken from [Penlight][p], [Underscore][u], [cwtest][cw], and
+     	-- [luassert][l].
+     	-- [p]: https://github.com/stevedonovan/Penlight
+     	-- [u]: https://github.com/mirven/underscore.lua
+     	-- [cw]: https://github.com/catwell/cwtest
+     	-- [l]: https://github.com/Olivine-Labs/luassert
+     	--
+     	-- Predeclare both function names
+     	local keyvaluesame
+     	local deepsame
+     	--
+     	--- keyvaluesame(table, table) => true or false
+     	-- Helper method to compare all the keys and values of a table
+     	keyvaluesame = function (t1, t2)
+  492	  for k1, v1 in pairs(t1) do
+  334	    local v2 = t2[k1]
+  334	    if v2 == nil or not deepsame(v1, v2) then return false end
+     	  end
+     	
+     	  -- Check for any keys present in t2 but not t1
+  417	  for k2, _ in pairs(t2) do
+  299	    if t1[k2] == nil then return false end
+     	  end
+     	
+  118	  return true
+     	end
+     	--
+     	--- deepsame(item, item) => true or false
+     	-- Compare two items of any type for identity
+     	deepsame = function (t1, t2)
+  514	  local ty1, ty2 = type(t1), type(t2)
+  514	  if ty1 ~= ty2 then return false end
+  514	  if ty1 ~= 'table' then return t1 == t2 end
+     	
+     	  -- If ._eq is found, use == and end quickly.
+     	  -- As of Lua 5.3 == only cares if **one** of the two items has a __eq
+     	  -- metamethod. Penlight, underscore and cwtest take the same approach,
+     	  -- so I will as well.
+  268	  local eq = rawget(getmetatable(t1) or {}, '__eq')
+  268	  if (type(eq) == 'function') then
+   70	    return not not eq(t1, t2)
+     	  else
+  198	    return keyvaluesame(t1, t2)
+     	  end
+     	end
+     	
+     	---- tapered test suite
+     	
+  126	local exit_status = 0
+  126	local test_count = 0
+  126	local debug_level = 3
+     	
+     	local setup_call = function ()
+  796	  if _G["setup"] then return _G["setup"]() end
+     	end
+     	
+     	local teardown_call = function ()
+  796	  if _G["teardown"] then return _G["teardown"]() end
+     	end
+     	
+     	-- All other tests are defined in terms of this primitive, which is
+     	-- kept private.
+     	local _test = function (exp, msg)
+  796	  test_count = test_count + 1
+     	
+  796	  if msg then
+  782	    msg = sprintf(" - %s", msg)
+     	  else
+   14	    msg = ''
+     	  end
+     	
+  796	  setup_call()
+     	
+  796	  if exp then
+  486	    printf("ok %s%s\n", test_count, msg)
+     	  else
+  310	    exit_status = 1 + exit_status
+  310	    printf("not ok %s%s\n", test_count, msg)
+  310	    local info = get_info(debug_level)
+  620	    printf("# Trouble in %s around line %s\n",
+  310	           slice(info.source, 2), info.currentline)
+     	  end
+     	
+  796	  teardown_call()
+     	end
+     	
+     	local ok = function (expression, msg)
+   86	  _test(expression, msg)
+     	end
+     	
+     	local nok = function (expression, msg)
+   20	  _test(not expression, msg)
+     	end
+     	
+     	local is = function (actual, expected, msg)
+  160	  _test(actual == expected, msg)
+     	end
+     	
+     	local isnt = function (actual, expected, msg)
+  170	  _test(actual ~= expected, msg)
+     	end
+     	
+     	local same = function (actual, expected, msg)
+  200	  _test(deepsame(actual, expected), msg)
+     	end
+     	
+     	local like = function (str, pattern, msg)
+   60	  _test(str_find(str, pattern), msg)
+     	end
+     	
+     	local unlike = function (str, pattern, msg)
+   30	  _test(not str_find(str, pattern), msg)
+     	end
+     	
+     	local pass = function (msg)
+   20	  _test(true, msg)
+     	end
+     	
+     	local fail = function (msg)
+   20	  _test(false, msg)
+     	end
+     	
+     	local boom = function (func, args, msg)
+     	  local err, errmsg
+   30	  err, errmsg = pcall(func, unpack(args))
+   30	  _test(not err, msg)
+   30	  if not err and type(errmsg) == 'string' then
+   20	    printf('# Got this error: "%s"\n', errmsg)
+     	  end
+     	end
+     	
+     	local done = function (n)
+  116	  local expected = tonumber(n)
+  116	  if not expected or test_count == expected then
+  110	    printf('1..%d\n', test_count)
+    6	  elseif expected ~= test_count then
+    6	    exit_status = 1 + exit_status
+     	    local s
+    8	    if expected == 1 then s = '' else s = 's' end
+   10	    printf("# Bad plan. You planned %d test%s but ran %d\n",
+    4	      expected, s, test_count)
+     	  end
+  122	  exit(exit_status)
+     	end
+     	
+  126	return {
+  126	  ok = ok,
+  126	  nok = nok,
+  126	  is = is,
+  126	  isnt = isnt,
+  126	  same = same,
+  126	  like = like,
+  126	  unlike = unlike,
+  126	  pass = pass,
+  126	  fail = fail,
+  126	  boom = boom,
+  126	  done = done,
+  126	  _VERSION = '1.1-0',
+  126	  _AUTHOR = 'Peter Aronoff',
+  126	  _URL = 'https://bitbucket.org/telemachus/tapered',
+  126	  _LICENSE = 'BSD 3-Clause'
+   52	}
+
+==============================================================================
+Summary
+==============================================================================
+
+82	0	100.00%	../src/tapered.lua
+------------------------
+82	0	100.00%	
